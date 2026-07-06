@@ -64,6 +64,27 @@ from model_config import get_chat_model
 # Load environment variables
 load_dotenv()
 
+
+def _extract_text(content) -> str:
+    """Extract plain text from LLM response content.
+    
+    Some providers (e.g. Gemini) return content as a list of blocks:
+      [{'type': 'text', 'text': '...'}]
+    Others return a plain string. This helper normalizes both.
+    """
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for block in content:
+            if isinstance(block, dict) and "text" in block:
+                parts.append(block["text"])
+            elif isinstance(block, str):
+                parts.append(block)
+        return "\n".join(parts)
+    return str(content) if content else ""
+
+
 # =============================================================================
 # SECTION 1: TOOL DEFINITIONS
 # =============================================================================
@@ -340,7 +361,7 @@ Output format:
     
     return {
         "messages": [response],
-        "plan": response.content,
+        "plan": _extract_text(response.content),
         "current_phase": "coding",
         "iteration": state.get("iteration", 0) + 1
     }
@@ -390,7 +411,7 @@ You have access to tools to help you write and test code.
     # The response might contain tool_calls — that's handled by routing logic
     return {
         "messages": [response],
-        "code_output": response.content if response.content else "",
+        "code_output": _extract_text(response.content),
         "current_phase": "coding"  # stays in coding until tools are done
     }
 
@@ -432,7 +453,7 @@ You have tools to read and execute code for verification.
     
     return {
         "messages": [response],
-        "review_feedback": response.content if response.content else "",
+        "review_feedback": _extract_text(response.content),
         "current_phase": "reviewing"
     }
 
@@ -507,7 +528,7 @@ def should_revise(state: AgentState) -> Literal["coder", "end"]:
     - If iteration limit reached → END (prevent infinite loops)
     - Otherwise → back to coder for revisions
     """
-    review = state.get("review_feedback", "")
+    review = _extract_text(state.get("review_feedback", ""))
     iteration = state.get("iteration", 0)
     
     # Safety: max 3 iterations to prevent infinite loops

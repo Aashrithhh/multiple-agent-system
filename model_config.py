@@ -1,15 +1,16 @@
-"""Central model configuration for the coding-agent lessons."""
+"""
+Central model configuration for the coding-agent lessons.
+
+Supports two providers (configured via .env):
+  1. Azure OpenAI  — set AZURE_OPENAI_ENDPOINT + AZURE_OPENAI_CHAT_API_KEY
+  2. Google Gemini — set GEMINI_API_KEY (used as fallback or primary)
+
+Set MODEL_PROVIDER=gemini or MODEL_PROVIDER=azure in .env to choose.
+Defaults to gemini if both are configured.
+"""
 
 import os
-import ssl
-from pathlib import Path
-
-import certifi
-import httpx
 from dotenv import load_dotenv
-from langchain_openai import ChatOpenAI
-from pydantic import SecretStr
-
 
 load_dotenv()
 
@@ -24,28 +25,51 @@ def _required(name: str) -> str:
     return value
 
 
-def get_chat_model() -> ChatOpenAI:
-    """Create the Azure-hosted OpenAI chat model used by the project."""
+def _get_gemini_model():
+    """Create a Gemini chat model via langchain-google-genai."""
+    from langchain_google_genai import ChatGoogleGenerativeAI
+
+    return ChatGoogleGenerativeAI(
+        model=os.getenv("GEMINI_CHAT_MODEL", "gemini-2.5-flash"),
+        google_api_key=_required("GEMINI_API_KEY"),
+        temperature=float(os.getenv("CHAT_TEMPERATURE", "0")),
+        max_output_tokens=int(os.getenv("CHAT_MAX_TOKENS", "6000")),
+    )
+
+
+def _get_azure_model():
+    """Create an Azure OpenAI chat model."""
+    from langchain_openai import AzureChatOpenAI
+
     endpoint = _required("AZURE_OPENAI_ENDPOINT").rstrip("/")
     api_key = _required("AZURE_OPENAI_CHAT_API_KEY")
-    ssl_context = ssl.create_default_context(cafile=certifi.where())
 
-    # Corporate antivirus/proxy products may publish their trusted root here.
-    # Add it to the normal CA bundle without weakening TLS verification.
-    extra_ca = os.getenv("NODE_EXTRA_CA_CERTS")
-    if extra_ca and Path(extra_ca).is_file():
-        ssl_context.load_verify_locations(cafile=extra_ca)
-        # Some locally installed proxy roots predate OpenSSL's strict RFC 5280
-        # checks. Keep certificate verification enabled while allowing that root.
-        ssl_context.verify_flags &= ~ssl.VERIFY_X509_STRICT
-
-    return ChatOpenAI(
-        api_key=SecretStr(api_key),
-        base_url=f"{endpoint}/openai/v1/",
-        default_headers={"api-key": api_key},
-        model=_required("AZURE_OPENAI_CHAT_DEPLOYMENT"),
+    return AzureChatOpenAI(
+        azure_endpoint=endpoint,
+        api_key=api_key,
+        azure_deployment=_required("AZURE_OPENAI_CHAT_DEPLOYMENT"),
+        api_version="2024-12-01-preview",
         temperature=float(os.getenv("CHAT_TEMPERATURE", "0")),
-        max_completion_tokens=int(os.getenv("CHAT_MAX_TOKENS", "6000")),
-        http_client=httpx.Client(verify=ssl_context),
-        http_async_client=httpx.AsyncClient(verify=ssl_context),
+        max_tokens=int(os.getenv("CHAT_MAX_TOKENS", "6000")),
+    )
+
+
+def get_chat_model():
+    """Return the configured chat model based on MODEL_PROVIDER env var."""
+    provider = os.getenv("MODEL_PROVIDER", "").lower()
+
+    # Explicit choice
+    if provider == "azure":
+        return _get_azure_model()
+    if provider == "gemini":
+        return _get_gemini_model()
+
+    # Auto-detect: prefer Gemini (simpler setup), fall back to Azure
+    if os.getenv("GEMINI_API_KEY"):
+        return _get_gemini_model()
+    if os.getenv("AZURE_OPENAI_CHAT_API_KEY"):
+        return _get_azure_model()
+
+    raise RuntimeError(
+        "No model configured. Set GEMINI_API_KEY or AZURE_OPENAI_CHAT_API_KEY in .env"
     )

@@ -177,6 +177,11 @@ def lesson_3_manual_tool_execution():
 # This eliminates the manual execution code.
 # =============================================================================
 
+# State used by lessons 4 and 5
+class SimpleState(TypedDict):
+    messages: Annotated[list, add_messages]
+
+
 def lesson_4_tool_node():
     """Show how ToolNode automates tool execution."""
     print("\n" + "=" * 50)
@@ -225,9 +230,6 @@ def lesson_4_tool_node():
 #
 # This loop continues until the LLM decides it's done (no more tool calls).
 # =============================================================================
-
-class SimpleState(TypedDict):
-    messages: Annotated[list, add_messages]
 
 
 def lesson_5_complete_graph():
@@ -293,17 +295,11 @@ def lesson_5_complete_graph():
 
 if __name__ == "__main__":
     lesson_1_tool_schema()
-    
-    # Uncomment these once you have your OPENAI_API_KEY set in .env:
-    # lesson_2_bind_tools()
-    # lesson_3_manual_tool_execution()
-    # lesson_4_tool_node()
-    # lesson_5_complete_graph()
+    lesson_2_bind_tools()
+    lesson_3_manual_tool_execution()
+    lesson_4_tool_node()
+    lesson_5_complete_graph()
     
     print("\n\n" + "=" * 70)
-    print("📝 TO RUN THE LLM LESSONS:")
-    print("   1. Copy .env.example to .env")
-    print("   2. Add your OPENAI_API_KEY")
-    print("   3. Uncomment lessons 2-5 above")
-    print("   4. Run: python tool_calling_fundamentals.py")
+    print("ALL 5 LESSONS COMPLETED SUCCESSFULLY")
     print("=" * 70)
